@@ -1,165 +1,514 @@
-============================================================
---  PAINEL DE CÓDIGO - por Replit Agent
---
---  Como usar:
---  1. Execute ESTE script primeiro (Command Bar ou executor)
---  2. Execute QUALQUER outro script depois
---  3. O código do outro script aparece no painel preto
--- ============================================================
+local redzlib = loadstring(game:HttpGet("https://raw.githubusercontent.com/realredz/RedzLibV5/main/Source.lua"))()
+local Window = redzlib:MakeWindow({
+    Title = "Admin-X Beta",
+    SubTitle = "Dont expect it to be perfect ",
+    SaveFolder = "Admin-x 1 Config"
+})
+
+local Tab = Window:MakeTab({"Ui"})
+local Tab = Window:MakeTab({"Npc"})
+local Tab = Window:MakeTab({"Tools"})
+
+local Section = Tab:AddSection({ Name = "Client Side" })
+Tab:AddButton({
+    Name = "Teleoport tool",
+    Callback = function()
+        local plr = game:GetService("Players").LocalPlayer
+        local mouse = plr:GetMouse()
+        local tool = Instance.new("Tool")
+        tool.RequiresHandle = false
+        tool.Name = "[Teleport Tool]"
+        tool.Activated:Connect(function()
+            local root = plr.Character.HumanoidRootPart
+            local pos = mouse.Hit.Position+Vector3.new(0,2.5,0)
+            local offset = pos-root.Position
+            root.CFrame = root.CFrame+offset
+        end)
+        tool.Parent = plr.Backpack
+    end
+})
+
+local Section = Tab:AddSection({ Name = "Server Side" })
+local dropdownOptions = {"None"}
+local autoUpdateEnabled = false
+
+local function updateTools()
+    if not autoUpdateEnabled then return end
+    for _, tool in pairs(game:GetDescendants()) do
+        if tool:IsA("Tool") and not table.find(dropdownOptions, tool.Name) then
+            table.insert(dropdownOptions, tool.Name)
+            Tab:SetDropdownOptions("ToolSelector", dropdownOptions)
+        end
+    end
+end
+
+local Section = Tab:AddSection({ Name = "Select a Tool" })
+Tab:AddDropdown({
+    Name = "ToolSelector",
+    Default = "None",
+    Options = dropdownOptions,
+    Callback = function(Value)
+        if Value ~= "None" then
+            local player = game.Players.LocalPlayer
+            local tool = game:FindFirstChild(Value, true)
+            if tool and player.Backpack then
+                local clonedTool = tool:Clone()
+                clonedTool.Parent = player.Backpack
+            end
+        end
+    end
+})
+
+game:GetService("RunService").Heartbeat:Connect(updateTools)
+
+local Section = Tab:AddSection({ Name = "Auto Update" })
+Tab:AddToggle({
+    Name = "Auto Update",
+    Default = false,
+    Callback = function(Value) autoUpdateEnabled = Value end
+})
+
+local Section = Tab:AddSection({ Name = "Update" })
+Tab:AddButton({
+    Name = "Update DropDown",
+    Callback = function()
+        for _, tool in pairs(game:GetDescendants()) do
+            if tool:IsA("Tool") and not table.find(dropdownOptions, tool.Name) then
+                table.insert(dropdownOptions, tool.Name)
+            end
+        end
+        Tab:SetDropdownOptions("ToolSelector", dropdownOptions)
+    end
+})
+
+local Tab = Window:MakeTab({"Esp"})
+local Section = Tab:AddSection({ Name = "Player Esp" })
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local ESPColor = {
+    ["Red"] = Color3.fromRGB(255, 0, 0),
+    ["Blue"] = Color3.fromRGB(0, 0, 255)
+}
+
+local function getTeamColor(player)
+    if player.Team then
+        return ESPColor[player.Team.Name] or Color3.fromRGB(255, 255, 255)
+    else
+        return Color3.fromRGB(255, 255, 255)
+    end
+end
+
+local ESPEnabled = false
+local ESPFrames = {}
+
+local function createESP(player)
+    local character = player.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        local box = Drawing.new("Square")
+        box.Color = getTeamColor(player)
+        box.Thickness = 1
+        box.Transparency = 0.5
+        local text = Drawing.new("Text")
+        text.Size = 16
+        text.Color = Color3.fromRGB(255, 255, 255)
+        text.Outline = true
+        local runService = game:GetService("RunService")
+        local connection
+        connection = runService.RenderStepped:Connect(function()
+            if ESPEnabled and character and character:FindFirstChild("HumanoidRootPart") then
+                local rootPart = character.HumanoidRootPart
+                local rootPartPosition, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+                if onScreen then
+                    box.Size = Vector2.new(2000 / rootPartPosition.Z, 2000 / rootPartPosition.Z)
+                    box.Position = Vector2.new(rootPartPosition.X - box.Size.X / 2, rootPartPosition.Y - box.Size.Y / 2)
+                    box.Visible = true
+                    local distance = (LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
+                    text.Text = string.format("%s\nHP: %d\nDist: %d", player.Name, math.floor(player.Character.Humanoid.Health), math.floor(distance))
+                    text.Position = Vector2.new(rootPartPosition.X, rootPartPosition.Y - box.Size.Y / 2 - 20)
+                    text.Visible = true
+                else
+                    box.Visible = false
+                    text.Visible = false
+                end
+            else
+                box.Visible = false
+                text.Visible = false
+                connection:Disconnect()
+                box:Remove()
+                text:Remove()
+            end
+        end)
+        table.insert(ESPFrames, {box = box, text = text, connection = connection})
+    end
+end
+
+local function addESPToAllPlayers()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then createESP(player) end
+    end
+    Players.PlayerAdded:Connect(function(player)
+        if player ~= LocalPlayer then
+            player.CharacterAdded:Connect(function(character) createESP(player) end)
+        end
+    end)
+end
+
+local function removeESPFrames()
+    for _, frame in ipairs(ESPFrames) do
+        frame.connection:Disconnect()
+        frame.box:Remove()
+        frame.text:Remove()
+    end
+    ESPFrames = {}
+end
+
+local Toggle = Tab:AddToggle({
+    Name = "Turn On Player ESP",
+    Default = false,
+    Callback = function(Value)
+        ESPEnabled = Value
+        if ESPEnabled then addESPToAllPlayers() else removeESPFrames() end
+    end
+})
+
+local Tab = Window:MakeTab({"testing"})
+Tab:AddButton({
+    Name = "Death Counter",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        local function onTouch(otherPart)
+            local otherCharacter = otherPart.Parent
+            if otherCharacter and otherCharacter:IsA("Model") and otherCharacter:FindFirstChild("Humanoid") then
+                local otherHumanoidRootPart = otherCharacter:FindFirstChild("HumanoidRootPart")
+                if otherHumanoidRootPart then
+                    local direction = otherHumanoidRootPart.CFrame.LookVector
+                    local newPosition = otherHumanoidRootPart.CFrame * CFrame.new(-direction.X * 5, 0, -direction.Z * 5)
+                    humanoidRootPart.CFrame = newPosition
+                end
+            end
+        end
+        humanoidRootPart.Touched:Connect(onTouch)
+    end
+})
+
+Tab:AddButton({Name = "Arceus x", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/chillz-workshop/main/Arceus%20X%20V3"))() end})
+Tab:AddButton({Name = "Arceus x", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/chillz-workshop/main/Arceus%20X%20V3"))() end})
+Tab:AddButton({Name = "Arceus x", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/chillz-workshop/main/Arceus%20X%20V3"))() end})
+Tab:AddButton({Name = "Arceus x", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/chillz-workshop/main/Arceus%20X%20V3"))() end})
+Tab:AddButton({Name = "Update DropDown", Callback = function() end})
+
+Tab:AddButton({
+    Name = "The Diffrentce",
+    Callback = function()
+        local TweenService = game:GetService("TweenService")
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        local function createTween(part, properties, duration, easingStyle, easingDirection)
+            local tweenInfo = TweenInfo.new(duration, easingStyle, easingDirection)
+            local tween = TweenService:Create(part, tweenInfo, properties)
+            return tween
+        end
+        local function tweenCharacter()
+            local tween1 = createTween(humanoidRootPart, {CFrame = humanoidRootPart.CFrame * CFrame.new(5, 0, 0)}, 0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+            local tween2 = createTween(humanoidRootPart, {CFrame = humanoidRootPart.CFrame * CFrame.new(-10, 0, 0)}, 0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+            local tween3 = createTween(humanoidRootPart, {CFrame = humanoidRootPart.CFrame * CFrame.new(5, 0, 0)}, 0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+            local tween4 = createTween(humanoidRootPart, {CFrame = humanoidRootPart.CFrame * CFrame.new(0, 50, 0)}, 1, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out)
+            tween1:Play()
+            tween1.Completed:Connect(function() tween2:Play() end)
+            tween2.Completed:Connect(function() tween3:Play() end)
+            tween3.Completed:Connect(function() tween4:Play() end)
+        end
+        tweenCharacter()
+    end
+})
+
+local Toggle = Tab:AddToggle({
+    Name = "Move Mining Pads",
+    Default = false,
+    Callback = function(Value)
+        toggle = Value
+        if toggle then moveMiningPadsToPlayer() end
+    end
+})
+
+local player = game.Players.LocalPlayer
+local toggle = false
+
+local function moveMiningPadsToPlayer()
+    local miningPadsFolder = workspace:FindFirstChild("MiningPads")
+    if not miningPadsFolder then print("MiningPads folder not found") return end
+    local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then print("HumanoidRootPart not found") return end
+    for _, part in pairs(miningPadsFolder:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CFrame = humanoidRootPart.CFrame + Vector3.new(0, 5, 0)
+        end
+    end
+end
+
+local Tab = Window:MakeTab({"Local Player"})
+local Section = Tab:AddSection({ Name = "Local Player" })
+local Section = Tab:AddSection({ Name = "Set Speed" })
 
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local LocalPlayer = Players.LocalPlayer
+local lastSpeed = 16
 
--- ===== INTERFACE =====
+local CoolSlider = Tab:AddSlider({
+    Name = "Player Walk Speed",
+    Min = 0,
+    Max = 759,
+    Default = 16,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "Speed",
+    Callback = function(value)
+        lastSpeed = value
+        if Toggle.Enabled then LocalPlayer.Character.Humanoid.WalkSpeed = value end
+    end,
+})
 
--- Remove painel antigo se existir
-local oldGui = playerGui:FindFirstChild("PainelCodigoGui")
-if oldGui then oldGui:Destroy() end
+local Toggle = Tab:AddToggle({
+    Name = "Set Speed",
+    Default = false,
+    Callback = function(Value)
+        Toggle.Enabled = Value
+        if Value then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                LocalPlayer.Character.Humanoid.WalkSpeed = lastSpeed
+            end
+        else
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                LocalPlayer.Character.Humanoid.WalkSpeed = 16
+            end
+        end
+    end
+})
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "PainelCodigoGui"
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.Parent = playerGui
-
--- Painel principal preto
-local painel = Instance.new("Frame")
-painel.Name = "Painel"
-painel.Size = UDim2.new(0, 520, 0, 360)
-painel.Position = UDim2.new(0.5, -260, 0.5, -180)
-painel.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-painel.BorderSizePixel = 0
-painel.Active = true
-painel.Draggable = true
-painel.Parent = screenGui
-
-Instance.new("UICorner", painel).CornerRadius = UDim.new(0, 7)
-
-local borda = Instance.new("UIStroke")
-borda.Color = Color3.fromRGB(50, 50, 50)
-borda.Thickness = 1
-borda.Parent = painel
-
--- Barra de título
-local titulo = Instance.new("Frame")
-titulo.Size = UDim2.new(1, 0, 0, 32)
-titulo.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-titulo.BorderSizePixel = 0
-titulo.Parent = painel
-Instance.new("UICorner", titulo).CornerRadius = UDim.new(0, 7)
-
-local tituloLabel = Instance.new("TextLabel")
-tituloLabel.Size = UDim2.new(1, -80, 1, 0)
-tituloLabel.Position = UDim2.new(0, 12, 0, 0)
-tituloLabel.BackgroundTransparency = 1
-tituloLabel.Text = "● Painel de Código"
-tituloLabel.TextColor3 = Color3.fromRGB(80, 220, 120)
-tituloLabel.TextSize = 13
-tituloLabel.Font = Enum.Font.Code
-tituloLabel.TextXAlignment = Enum.TextXAlignment.Left
-tituloLabel.Parent = titulo
-
--- Botão fechar
-local btnFechar = Instance.new("TextButton")
-btnFechar.Size = UDim2.new(0, 26, 0, 20)
-btnFechar.Position = UDim2.new(1, -30, 0.5, -10)
-btnFechar.BackgroundColor3 = Color3.fromRGB(190, 50, 50)
-btnFechar.Text = "✕"
-btnFechar.TextColor3 = Color3.fromRGB(255,255,255)
-btnFechar.TextSize = 11
-btnFechar.Font = Enum.Font.GothamBold
-btnFechar.BorderSizePixel = 0
-btnFechar.Parent = titulo
-Instance.new("UICorner", btnFechar).CornerRadius = UDim.new(0, 4)
-
-btnFechar.MouseButton1Click:Connect(function()
-    screenGui:Destroy()
+LocalPlayer.CharacterAdded:Connect(function(character)
+    character:WaitForChild("Humanoid").WalkSpeed = Toggle.Enabled and lastSpeed or 16
 end)
 
--- Scroll para o código
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -10, 1, -48)
-scroll.Position = UDim2.new(0, 5, 0, 38)
-scroll.BackgroundTransparency = 1
-scroll.BorderSizePixel = 0
-scroll.ScrollBarThickness = 4
-scroll.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 70)
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-scroll.Parent = painel
-
--- Label de código dentro do scroll
-local codeText = Instance.new("TextLabel")
-codeText.Size = UDim2.new(1, -10, 0, 0)
-codeText.Position = UDim2.new(0, 8, 0, 6)
-codeText.AutomaticSize = Enum.AutomaticSize.Y
-codeText.BackgroundTransparency = 1
-codeText.Text = "-- Aguardando código ser executado...\n-- Execute qualquer script depois deste."
-codeText.TextColor3 = Color3.fromRGB(170, 210, 170)
-codeText.TextSize = 13
-codeText.Font = Enum.Font.Code
-codeText.TextXAlignment = Enum.TextXAlignment.Left
-codeText.TextYAlignment = Enum.TextYAlignment.Top
-codeText.TextWrapped = false
-codeText.RichText = false
-codeText.Parent = scroll
-
--- Barra inferior
-local rodape = Instance.new("Frame")
-rodape.Size = UDim2.new(1, 0, 0, 10)
-rodape.Position = UDim2.new(0, 0, 1, -10)
-rodape.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-rodape.BorderSizePixel = 0
-rodape.Parent = painel
-
--- ===== LÓGICA DE CAPTURA =====
-
--- Função que exibe o código no painel com efeito de escrita linha por linha
-local function exibirCodigo(codigo)
-    if typeof(codigo) ~= "string" or #codigo == 0 then return end
-
-    codeText.Text = ""
-    tituloLabel.Text = "● Capturando código..."
-    tituloLabel.TextColor3 = Color3.fromRGB(220, 180, 50)
-
-    local linhas = {}
-    for linha in (codigo .. "\n"):gmatch("([^\n]*)\n") do
-        table.insert(linhas, linha)
+LocalPlayer.Character:WaitForChild("Humanoid").AncestryChanged:Connect(function(child, parent)
+    if parent and child:IsA("Humanoid") then
+        child.WalkSpeed = Toggle.Enabled and lastSpeed or 16
     end
+end)
 
-    -- Efeito de escrita: adiciona linha por linha
-    local textoAtual = ""
-    for i, linha in ipairs(linhas) do
-        textoAtual = textoAtual .. linha
-        if i < #linhas then
-            textoAtual = textoAtual .. "\n"
+local Section = Tab:AddSection({ Name = "Set jump" })
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local lastJumpHeight = 7.2
+
+local JumpSlider = Tab:AddSlider({
+    Name = "Player Jump Height",
+    Min = 0,
+    Max = 100,
+    Default = 7.2,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "Jump",
+    Callback = function(value)
+        lastJumpHeight = value
+        if JumpToggle.Enabled then LocalPlayer.Character.Humanoid.JumpHeight = value end
+    end,
+})
+
+local JumpToggle = Tab:AddToggle({
+    Name = "Set Jump Height",
+    Default = false,
+    Callback = function(Value)
+        JumpToggle.Enabled = Value
+        if Value then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                LocalPlayer.Character.Humanoid.JumpHeight = lastJumpHeight
+            end
+        else
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                LocalPlayer.Character.Humanoid.JumpHeight = 7.2
+            end
         end
-        codeText.Text = textoAtual
-
-        -- Scroll automático para baixo
-        task.defer(function()
-            scroll.CanvasPosition = Vector2.new(0, math.huge)
-        end)
-
-        task.wait(0.012) -- velocidade da escrita (ajuste se quiser mais rápido/lento)
     end
+})
 
-    tituloLabel.Text = "● Código Capturado ✓ (" .. #linhas .. " linhas)"
-    tituloLabel.TextColor3 = Color3.fromRGB(80, 220, 120)
+LocalPlayer.CharacterAdded:Connect(function(character)
+    character:WaitForChild("Humanoid").JumpHeight = JumpToggle.Enabled and lastJumpHeight or 7.2
+end)
+
+LocalPlayer.Character:WaitForChild("Humanoid").AncestryChanged:Connect(function(child, parent)
+    if parent and child:IsA("Humanoid") then
+        child.JumpHeight = JumpToggle.Enabled and lastJumpHeight or 7.2
+    end
+end)
+
+local Section = Tab:AddSection({ Name = "Set Gravity" })
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local lastGravity = 54
+
+local GravitySlider = Tab:AddSlider({
+    Name = "Player Gravity",
+    Min = 0,
+    Max = 100,
+    Default = 54,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "Gravity",
+    Callback = function(value)
+        lastGravity = value
+        if GravityToggle.Enabled then game.Workspace.Gravity = value end
+    end,
+})
+
+local GravityToggle = Tab:AddToggle({
+    Name = "Set Player Gravity",
+    Default = false,
+    Callback = function(Value)
+        GravityToggle.Enabled = Value
+        if Value then game.Workspace.Gravity = lastGravity else game.Workspace.Gravity = 54 end
+    end
+})
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+    if GravityToggle.Enabled then game.Workspace.Gravity = lastGravity else game.Workspace.Gravity = 54 end
+end)
+
+LocalPlayer.Character:WaitForChild("Humanoid").AncestryChanged:Connect(function(child, parent)
+    if parent and child:IsA("Humanoid") then
+        if GravityToggle.Enabled then game.Workspace.Gravity = lastGravity else game.Workspace.Gravity = 54 end
+    end
+end)
+
+local Section = Tab:AddSection({ Name = "Pet Simulator Games" })
+local autoCollectOrbs = false
+local autoCollectLootbags = false
+
+local ToggleOrbs = Tab:AddToggle({
+    Name = "Auto Collect Orbs",
+    Default = false,
+    Callback = function(Value)
+        autoCollectOrbs = Value
+        if autoCollectOrbs then collectOrbs() end
+    end
+})
+
+local function collectOrbs()
+    while autoCollectOrbs do
+        local fororbs = workspace.__THINGS.Orbs:GetChildren()
+        local MyOrbs = {}
+        if #fororbs > 0 then
+            for i, v in next, fororbs do
+                MyOrbs[i] = tonumber(v.Name)
+                v:Destroy()
+            end
+        end
+        RE("Orbs: Collect"):FireServer(MyOrbs)
+        wait(1)
+    end
 end
 
--- ===== INTERCEPTA LOADSTRING =====
--- Quando você executar outro script depois deste,
--- o loadstring vai ser chamado com o código desse script.
+local ToggleLootbags = Tab:AddToggle({
+    Name = "Auto Collect Lootbags",
+    Default = false,
+    Callback = function(Value)
+        autoCollectLootbags = Value
+        if autoCollectLootbags then collectLootbags() end
+    end
+})
 
-local loadstringOriginal = loadstring
-
-loadstring = function(codigo, fonte, ...)
-    -- Exibe o código no painel (em thread separada pra não travar a execução)
-    task.spawn(exibirCodigo, codigo)
-    -- Executa o código normalmente
-    return loadstringOriginal(codigo, fonte, ...)
+local function collectLootbags()
+    while autoCollectLootbags do
+        local forlootbags = workspace.__THINGS.Lootbags:GetChildren()
+        local MyLootbags = {}
+        if #forlootbags > 0 then
+            for i, v in next, forlootbags do
+                MyLootbags[i] = tonumber(v.Name)
+                v:Destroy()
+            end
+        end
+        RE("Lootbags: Collect"):FireServer(MyLootbags)
+        wait(1)
+    end
 end
 
-print("[PainelCodigo] ✅ Ativo! Execute qualquer script agora e o código aparecerá no painel.")
+spawn(function() while true do if autoCollectOrbs then collectOrbs() end wait(1) end end)
+spawn(function() while true do if autoCollectLootbags then collectLootbags() end wait(1) end end)
+
+local Toggle = Tab:AddToggle({
+    Name = "Auto Collect Ranked Rewards",
+    Default = false,
+    Callback = function(Value)
+        local ClaimRanks = Value
+        for _,v in Player.PlayerGui.Rank.Frame.Rewards.Items.Unlocks:GetChildren() do
+            if v.Name == "ClaimSlot" then
+                RE("Ranks_ClaimReward"):FireServer(tonumber(v.Title.Text))
+            end
+        end
+    end
+})
+
+local Section = Tab:AddSection({ Name = "Afk Section" })
+local Toggle = Tab:AddToggle({
+    Name = "Anti-Afk",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            getconnections(game:GetService("Players").LocalPlayer.Idled):Disable()
+        else
+            print('Anti-AfK Script Not Active')
+        end
+    end
+})
+
+local Section = Tab:AddSection({ Name = "Tools" })
+Tab:AddButton({Name = "Arceus x", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/chillz-workshop/main/Arceus%20X%20V3"))() end})
+Tab:AddButton({Name = "aim lock", Callback = function() loadstring(game:HttpGet("https://rentry.co/n55gmtpi/raw", true))() end})
+Tab:AddButton({Name = "Remote spy", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/realredz/SimpleSpy/main/Mobile.lua"))() end})
+Tab:AddButton({Name = "Dex Explorer", Callback = function() loadstring(game:HttpGet("https://cdn.wearedevs.net/scripts/Dex%20Explorer.txt"))() end})
+Tab:AddButton({Name = "Dex explorer keyless", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/realredz/DEX-Explorer/main/Mobile.lua"))() end})
+Tab:AddButton({Name = "Inf Yeld", Callback = function() loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))() end})
+Tab:AddButton({Name = "stream sniper", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/FFJ1/Roblox-Exploits/main/scripts/Sniper.lua"))() end})
+Tab:AddButton({Name = "Player Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/JustAP1ayer/PlayerHubOther/main/PlayerHubLoader.lua"))() end})
+Tab:AddButton({Name = "Name less Admin", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/Source.lua"))() end})
+Tab:AddButton({Name = "Eclipse hub", Callback = function() getgenv().mainKey = "nil" loadstring(game:HttpGet("https://api.eclipsehub.xyz/auth"))() end})
+
+Tab:AddButton({
+    Name = "vector position finder",
+    Callback = function()
+        local ScreenGui = Instance.new("ScreenGui")
+        local Frame = Instance.new("Frame")
+        local title = Instance.new("TextLabel")
+        local copy = Instance.new("TextButton")
+        local pos = Instance.new("TextBox")
+        local find = Instance.new("TextButton")
+        ScreenGui.Parent = game.CoreGui
+        ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        Frame.Parent = ScreenGui
+        Frame.BackgroundColor3 = Color3.fromRGB(43, 43, 43)
+        Frame.BorderSizePixel = 0
+        Frame.Position = UDim2.new(0.639646292, 0, 0.399008662, 0)
+        Frame.Size = UDim2.new(0, 387, 0, 206)
+        Frame.Active = true
+        title.Name = "title"
+        title.Parent = Frame
+        title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        title.BorderSizePixel = 0
+        title.Size = UDim2.new(0, 387, 0, 50)
+        title.Font = Enum.Font.GothamBold
+        title.Text = "Position Finder"
+        title.TextColor3 = Color3.fromRGB(255, 255, 255)
+        title.TextSize = 30.000
+        title.TextWrapped = true
+        copy.Name = "copy"
+        copy.Parent = Frame
+        copy.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        copy.BorderSizePixel = 0
+        copy.Position = UDim2.new(0.527131796, 0, 0.635922313, 0)
+        copy.Size = UDim2.new(0, 148, 0, 50)
+        copy.Font = Enum.Font.GothamSemibold
+        copy.Text = "Copy"
+   
